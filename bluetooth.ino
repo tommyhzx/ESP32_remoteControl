@@ -12,6 +12,7 @@ class MyCallbacks : public BLECharacteristicCallbacks
 {
     void onWrite(BLECharacteristic *pCharacteristic)
     {
+        Serial.println("BLE device onWrite");
         String value = pCharacteristic->getValue();
 
         if (value.length() > 0)
@@ -29,38 +30,67 @@ class MyCallbacks : public BLECharacteristicCallbacks
                 int ssidEndIndex = value.indexOf("-PASSWORD:");
                 int passwordStartIndex = ssidEndIndex + 10; // "-PASSWORD:" 后面即为 password 的起始位置
                 int passwordEndIndex = value.indexOf(";");
-                
+
                 int separatorIndex = value.indexOf(':', 7); // 从第7个字符开始查找下一个 ':'
-                if (ssidStartIndex != -1 && ssidEndIndex != -1 
-                && passwordStartIndex != -1 && passwordEndIndex != -1)
+                if (ssidStartIndex != -1 && ssidEndIndex != -1 && passwordStartIndex != -1 && passwordEndIndex != -1)
                 {
                     receivedSSID = value.substring(ssidStartIndex, ssidEndIndex);
                     receivedPassword = value.substring(passwordStartIndex, passwordEndIndex);
                     Serial.println("receivedSSID:" + receivedSSID + " receivedPassword:" + receivedPassword);
                     // 标记新配置已接收
                     DeviceConfigReceived = true;
+
+                    // 发送确认消息
+                    pCharacteristic->setValue("CONFIG_DONE");
+                    pCharacteristic->notify(); // 发送通知
                 }
             }
         }
+    };
+    
+    void onRead(BLECharacteristic *pCharacteristic)
+    {
+        Serial.println("BLE device read");
+    };
+};
+// BLEServer 回调类
+class ServerCallbacks : public BLEServerCallbacks
+{
+    void onConnect(BLEServer *pServer)
+    {
+        Serial.println("BLE device connected");
+    }
+
+    void onDisconnect(BLEServer *pServer)
+    {
+        Serial.println("BLE device disconnected");
+        // 重新启动蓝牙广播
+        BLEAdvertising *pAdvertising = pServer->getAdvertising();
+        pAdvertising->start();
     }
 };
-
 // 蓝牙初始化
+BLEServer *pDevice_Service = nullptr;
+BLECharacteristic *pDeviceCharacteristic = nullptr;
 void initBLE(String deviceName)
 {
     BLEDevice::init(deviceName);
-    BLEServer *pServer = BLEDevice::createServer();
-
-    BLEService *pService = pServer->createService(SERVICE_UUID);
-    BLECharacteristic *pCharacteristic = pService->createCharacteristic(
+    pDevice_Service = BLEDevice::createServer();
+    // 设置服务器回调
+    pDevice_Service->setCallbacks(new ServerCallbacks());
+    // 创建服务
+    BLEService *pService = pDevice_Service->createService(SERVICE_UUID);
+    // 创建特征
+    pDeviceCharacteristic = pService->createCharacteristic(
         CHARACTERISTIC_UUID,
-        BLECharacteristic::PROPERTY_READ |
-            BLECharacteristic::PROPERTY_WRITE);
-    pCharacteristic->setCallbacks(new MyCallbacks());
-    pCharacteristic->setValue("Hello World");
+        BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE |
+            BLECharacteristic::PROPERTY_NOTIFY);
+    // 设置回调
+    pDeviceCharacteristic->setCallbacks(new MyCallbacks());
+    pDeviceCharacteristic->setValue("Hello World");
     pService->start();
     // 设置广播，使手机可以搜索到
-    BLEAdvertising *pAdvertising = pServer->getAdvertising();
+    BLEAdvertising *pAdvertising = pDevice_Service->getAdvertising();
     pAdvertising->start();
 }
 
@@ -80,4 +110,13 @@ void bluetoothGetWifiConfig(String &ssid, String &password)
 {
     ssid = receivedSSID;
     password = receivedPassword;
+}
+// 通过notify发送数据
+void sendNotifyData(String data)
+{
+    if (pDeviceCharacteristic != nullptr)
+    {
+        pDeviceCharacteristic->setValue(data);
+        pDeviceCharacteristic->notify();
+    }
 }
