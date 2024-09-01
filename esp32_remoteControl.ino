@@ -193,12 +193,12 @@ void changeState(DeviceState newState)
   // 进入初始化状态，初始化蓝牙和wifi
   case DEV_INIT:
 
-    startWifiStation(g_wifiSSID, g_wifiPassword);
+    startWifiStation(g_wifiSSID, g_wifiPassword); // 启动wifi STA模式
+    initBLE(deviceName); // 初始化蓝牙
     Serial.println("初始化");
     break;
   case DEV_IDLE:
-    // 若wifi没有连接，则打开蓝牙
-    initBLE(deviceName);
+
     Serial.println("空闲");
     break;
   // 当状态从idle切换到configuring时，需要将wifi设置为STA模式

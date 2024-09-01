@@ -41,13 +41,13 @@ class MyCallbacks : public BLECharacteristicCallbacks
                     DeviceConfigReceived = true;
 
                     // 发送确认消息
-                    pCharacteristic->setValue("CONFIG_DONE");
-                    pCharacteristic->notify(); // 发送通知
+                    // pCharacteristic->setValue("CONFIG_DONE");
+                    // pCharacteristic->notify(); // 发送通知
                 }
             }
         }
     };
-    
+
     void onRead(BLECharacteristic *pCharacteristic)
     {
         Serial.println("BLE device read");
@@ -63,7 +63,8 @@ class ServerCallbacks : public BLEServerCallbacks
 
     void onDisconnect(BLEServer *pServer)
     {
-        Serial.println("BLE device disconnected");
+        Serial.print("BLE device disconnected server is ");
+        Serial.println(pServer->getConnId());
         // 重新启动蓝牙广播
         BLEAdvertising *pAdvertising = pServer->getAdvertising();
         pAdvertising->start();
@@ -92,6 +93,40 @@ void initBLE(String deviceName)
     // 设置广播，使手机可以搜索到
     BLEAdvertising *pAdvertising = pDevice_Service->getAdvertising();
     pAdvertising->start();
+}
+/*
+ *   关闭蓝牙
+*/
+void deinitBLE()
+{
+    if (pDevice_Service != nullptr)
+    {
+        // 停止广播
+        BLEAdvertising *pAdvertising = pDevice_Service->getAdvertising();
+        if (pAdvertising != nullptr)
+        {
+            pAdvertising->stop();
+        }
+        // 停止服务
+        BLEService *pService = pDevice_Service->getServiceByUUID(SERVICE_UUID);
+        if (pService != nullptr)
+        {
+            pService->stop();
+        }
+        // 删除特征
+        if (pDeviceCharacteristic != nullptr)
+        {
+            pDeviceCharacteristic->setCallbacks(nullptr);
+            pDeviceCharacteristic = nullptr;
+        }
+        // 删除服务
+        pDevice_Service->removeService(pService);
+        // 删除服务器
+        pDevice_Service->setCallbacks(nullptr);
+        pDevice_Service = nullptr;
+        // 释放蓝牙设备
+        BLEDevice::deinit();
+    }
 }
 
 // 检查蓝牙是否接收到数据
