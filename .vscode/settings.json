@@ -20,6 +20,15 @@
         "unordered_map": "cpp",
         "vector": "cpp",
         "ranges": "cpp",
-        "locale": "cpp"
+        "locale": "cpp",
+        "__memory": "cpp",
+        "limits": "cpp",
+        "ratio": "cpp",
+        "tuple": "cpp",
+        "istream": "cpp",
+        "functional": "cpp",
+        "type_traits": "cpp",
+        "utility": "cpp",
+        "variant": "cpp"
     }
 }

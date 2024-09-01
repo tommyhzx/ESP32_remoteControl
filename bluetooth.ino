@@ -2,12 +2,7 @@
 #include <BLEUtils.h>
 #include <BLEServer.h>
 
-// 设备配网数据接收标志
-// 声明全局变量
-String receivedSSID = "";
-String receivedPassword = "";
-bool DeviceConfigReceived = false;
-
+// BLE Characteristic的接收回调函数
 class MyCallbacks : public BLECharacteristicCallbacks
 {
     void onWrite(BLECharacteristic *pCharacteristic)
@@ -17,34 +12,12 @@ class MyCallbacks : public BLECharacteristicCallbacks
 
         if (value.length() > 0)
         {
-            Serial.println("*********");
-            for (int i = 0; i < value.length(); i++)
-                Serial.print(value[i]);
-
-            Serial.println();
-            Serial.println("*********");
-            // 解析配置信息,格式为CONFIG:SSID:ssdi-PASSWORD:password
-            if (value.startsWith("CONFIG:"))
+            // 接收到数据后，调用用户定义的回调函数，由用户处理
+            if (onWriteCallback != nullptr)
             {
-                int ssidStartIndex = value.indexOf("SSID:") + 5; // "SSID:" 后面即为 ssid 的起始位置
-                int ssidEndIndex = value.indexOf("-PASSWORD:");
-                int passwordStartIndex = ssidEndIndex + 10; // "-PASSWORD:" 后面即为 password 的起始位置
-                int passwordEndIndex = value.indexOf(";");
-
-                int separatorIndex = value.indexOf(':', 7); // 从第7个字符开始查找下一个 ':'
-                if (ssidStartIndex != -1 && ssidEndIndex != -1 && passwordStartIndex != -1 && passwordEndIndex != -1)
-                {
-                    receivedSSID = value.substring(ssidStartIndex, ssidEndIndex);
-                    receivedPassword = value.substring(passwordStartIndex, passwordEndIndex);
-                    Serial.println("receivedSSID:" + receivedSSID + " receivedPassword:" + receivedPassword);
-                    // 标记新配置已接收
-                    DeviceConfigReceived = true;
-
-                    // 发送确认消息
-                    // pCharacteristic->setValue("CONFIG_DONE");
-                    // pCharacteristic->notify(); // 发送通知
-                }
+                onWriteCallback(value);
             }
+            
         }
     };
 
@@ -88,7 +61,6 @@ void initBLE(String deviceName)
             BLECharacteristic::PROPERTY_NOTIFY);
     // 设置回调
     pDeviceCharacteristic->setCallbacks(new MyCallbacks());
-    pDeviceCharacteristic->setValue("Hello World");
     pService->start();
     // 设置广播，使手机可以搜索到
     BLEAdvertising *pAdvertising = pDevice_Service->getAdvertising();
@@ -96,7 +68,7 @@ void initBLE(String deviceName)
 }
 /*
  *   关闭蓝牙
-*/
+ */
 void deinitBLE()
 {
     if (pDevice_Service != nullptr)
@@ -128,24 +100,6 @@ void deinitBLE()
         BLEDevice::deinit();
     }
 }
-
-// 检查蓝牙是否接收到数据
-bool isBluetoothDataReceived()
-{
-    return DeviceConfigReceived;
-}
-// 清除蓝牙数据接收标志
-void clearBluetoothReceivedDataFlag()
-{
-    DeviceConfigReceived = false;
-}
-
-// 获取接收到的wifi配置信息
-void bluetoothGetWifiConfig(String &ssid, String &password)
-{
-    ssid = receivedSSID;
-    password = receivedPassword;
-}
 // 通过notify发送数据
 void sendNotifyData(String data)
 {
@@ -154,4 +108,9 @@ void sendNotifyData(String data)
         pDeviceCharacteristic->setValue(data);
         pDeviceCharacteristic->notify();
     }
+}
+// 设置回调函数
+void setOnWriteCallback(OnWriteCallback callback)
+{
+    onWriteCallback = callback;
 }

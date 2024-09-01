@@ -19,9 +19,11 @@
 #define SWITCH_OFF 0
 
 // 蓝牙模块的全景变量
-extern String receivedSSID;
-extern String receivedPassword;
-extern bool DeviceConfigReceived;
+bool g_DeviceConfigReceived; // 是否接收到新的蓝牙配置信息
+
+// 蓝牙接收的回调函数，供外部调用
+typedef void (*OnWriteCallback)(const String &rcvData);
+OnWriteCallback onWriteCallback = nullptr;
 
 // 设置wifi的账号密码全局变量，在setup和loop中使用
 String g_wifiSSID = "maoshushu";
@@ -138,12 +140,10 @@ void performStateActions()
       changeState(DEV_CONFIGURING);
     }
     // 检查蓝牙是否接收到新的WiFi配置信息
-    if (isBluetoothDataReceived())
+    if (g_DeviceConfigReceived == true)
     {
-      bluetoothGetWifiConfig(g_wifiSSID, g_wifiPassword);
-      Serial.println("bluetoothGetWifiConfig g_wifiSSID:" + g_wifiSSID + " g_wifiPassword:" + g_wifiPassword);
       // 重置标志
-      clearBluetoothReceivedDataFlag();
+      g_DeviceConfigReceived = false;
       changeState(DEV_CONFIGURING);
     }
     break;
@@ -194,7 +194,8 @@ void changeState(DeviceState newState)
   case DEV_INIT:
 
     startWifiStation(g_wifiSSID, g_wifiPassword); // 启动wifi STA模式
-    initBLE(deviceName); // 初始化蓝牙
+    initBLE(deviceName);                          // 初始化蓝牙
+    setOnWriteCallback(BLERecvCallback);          // 设置蓝牙收到消息的回调函数
     Serial.println("初始化");
     break;
   case DEV_IDLE:
@@ -208,10 +209,38 @@ void changeState(DeviceState newState)
     startWifiStation(g_wifiSSID, g_wifiPassword);
     break;
   case DEV_RUNNING:
+    sendNotifyData("WIFI_SUCCESS");
     Serial.println("运行中");
     break;
   case DEV_SLEEP:
     Serial.println("睡眠");
     break;
+  }
+}
+// 蓝牙接收数据的回调函数
+void BLERecvCallback(const String &rcvData)
+{
+  Serial.println("BLERecvCallback");
+  // 解析配置信息,格式为CONFIG:SSID:ssdi-PASSWORD:password
+  if (rcvData.startsWith("CONFIG:"))
+  {
+    int ssidStartIndex = rcvData.indexOf("SSID:") + 5; // "SSID:" 后面即为 ssid 的起始位置
+    int ssidEndIndex = rcvData.indexOf("-PASSWORD:");
+    int passwordStartIndex = ssidEndIndex + 10; // "-PASSWORD:" 后面即为 password 的起始位置
+    int passwordEndIndex = rcvData.indexOf(";");
+
+    int separatorIndex = rcvData.indexOf(':', 7); // 从第7个字符开始查找下一个 ':'
+    if (ssidStartIndex != -1 && ssidEndIndex != -1 && passwordStartIndex != -1 && passwordEndIndex != -1)
+    {
+      // 设置新的wifi账号密码
+      g_wifiSSID = rcvData.substring(ssidStartIndex, ssidEndIndex);
+      g_wifiPassword = rcvData.substring(passwordStartIndex, passwordEndIndex);
+      Serial.println("g_wifiSSID:" + g_wifiSSID + " g_wifiPassword:" + g_wifiPassword);
+      // 标记新配置已接收
+      g_DeviceConfigReceived = true;
+
+      // 发送确认消息
+      sendNotifyData("CONFIG_DONE");
+    }
   }
 }
