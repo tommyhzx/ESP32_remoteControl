@@ -40,9 +40,8 @@ bool enterAPMode(String AP_name, String &wifi_ssid, String &wifi_pwd)
 {
     char packetBuffer[255]; // 发送数据包
     String topic = AP_name;
-    // 不是AP模式时，打开AP热点
-    // 不是WIFI_AP，也不是WIFI_AP_STA
 
+    // 不是AP模式时，打开AP热点，不是WIFI_AP，也不是WIFI_AP_STA
     if (WiFi.getMode() != WIFI_AP && WiFi.getMode() != WIFI_AP_STA)
     {
         WiFi.softAP(AP_name);

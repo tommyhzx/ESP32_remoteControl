@@ -9,7 +9,6 @@ class MyCallbacks : public BLECharacteristicCallbacks
     {
         Serial.println("BLE device onWrite");
         String value = pCharacteristic->getValue();
-
         if (value.length() > 0)
         {
             // 接收到数据后，调用用户定义的回调函数，由用户处理
@@ -17,7 +16,6 @@ class MyCallbacks : public BLECharacteristicCallbacks
             {
                 onWriteCallback(value);
             }
-            
         }
     };
 
@@ -36,8 +34,7 @@ class ServerCallbacks : public BLEServerCallbacks
 
     void onDisconnect(BLEServer *pServer)
     {
-        Serial.print("BLE device disconnected server is ");
-        Serial.println(pServer->getConnId());
+        Serial.println("BLE device disconnected");
         // 重新启动蓝牙广播
         BLEAdvertising *pAdvertising = pServer->getAdvertising();
         pAdvertising->start();
@@ -71,6 +68,7 @@ void initBLE(String deviceName)
  */
 void deinitBLE()
 {
+    Serial.println("deinitBLE");
     if (pDevice_Service != nullptr)
     {
         // 停止广播

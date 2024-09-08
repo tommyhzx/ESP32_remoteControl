@@ -69,15 +69,10 @@ void setup()
   read_SSID_eeprom(g_wifiSSID, g_wifiPassword);
   Serial.println("g_wifiSSID:" + String(g_wifiSSID));
   Serial.println("g_wifiPassword:" + String(g_wifiPassword));
-  // 初始化WiFi,将wifi配置传递进wifi模块
-  // startWifiTask(g_wifiSSID, g_wifiPassword);
-  // 初始化蓝牙
-  // initBLE(deviceName);
 
   analogReadResolution(12);
   // 初始化状态机相关变量
   changeState(DEV_INIT);
-  // lastStateChange = millis();
 }
 
 void loop()
@@ -85,19 +80,7 @@ void loop()
   currentMillis = millis();
 
   performStateActions(); // 执行状态动作逻辑
-  // wifi循环
-  // wifiTask();
 
-  // 检查是否接收到新的WiFi配置信息
-  // if (DeviceConfigReceived)
-  // {
-  //   // 保存到EEPROM
-  //   save_config_EEPROM(receivedSSID, receivedPassword);
-  //   // 重新启动WiFi连接
-  //   startWifiTask(receivedSSID, receivedPassword);
-  //   // 重置标志
-  //   DeviceConfigReceived = false;
-  // }
   // put your main code here, to run repeatedly:
   // read the value from the sensor:
   // int sensorValue = analogRead(sensorPin);
@@ -130,6 +113,7 @@ void performStateActions()
       changeState(DEV_IDLE);
     }
     break;
+
   /* 空闲状态：配置AP模式和蓝牙广播
    * 等待接收AP的配网信息和蓝牙的配网信息*/
   case DEV_IDLE:
@@ -147,6 +131,7 @@ void performStateActions()
       changeState(DEV_CONFIGURING);
     }
     break;
+
   // 判断WIFI是否连接，连接则进入运行状态，否则进入idle状态
   case DEV_CONFIGURING:
     static unsigned long lastPrintTime = 0;
@@ -170,13 +155,31 @@ void performStateActions()
       changeState(DEV_IDLE);
     }
     break;
+
   // 一直检测wifi是否连接，若断开则进入idle状态
   case DEV_RUNNING:
+    static unsigned long runningStartTime = 0;
+    static bool bleClosed = false; // 新增变量，标记蓝牙是否已关闭
+
+    if (runningStartTime == 0) {
+        runningStartTime = millis(); // 记录进入DEV_RUNNING状态的时间
+        bleClosed = false; // 重置蓝牙关闭标志
+    }
+
     if (!isWifiConnected())
     {
-      changeState(DEV_IDLE);
+      changeState(DEV_INIT);
+      runningStartTime = 0; // 重置计时器
+    }
+    // 检查是否已经运行了10分钟，超过10分钟关闭蓝牙
+    else if (!bleClosed && millis() - runningStartTime >= 10 * 1 * 1000) // 检查是否已经运行了10分钟
+    {
+        Serial.println("10分钟已到，关闭蓝牙");
+        deinitBLE(); // 关闭蓝牙
+        bleClosed = true; // 设置蓝牙关闭标志
     }
     break;
+
   case DEV_SLEEP:
     break;
   default:
@@ -192,26 +195,28 @@ void changeState(DeviceState newState)
   {
   // 进入初始化状态，初始化蓝牙和wifi
   case DEV_INIT:
-
     startWifiStation(g_wifiSSID, g_wifiPassword); // 启动wifi STA模式
     initBLE(deviceName);                          // 初始化蓝牙
     setOnWriteCallback(BLERecvCallback);          // 设置蓝牙收到消息的回调函数
     Serial.println("初始化");
     break;
-  case DEV_IDLE:
 
+  case DEV_IDLE:
     Serial.println("空闲");
     break;
+
   // 当状态从idle切换到configuring时，需要将wifi设置为STA模式
   case DEV_CONFIGURING:
     Serial.println("配置中");
     // 启动wifi STA模式
     startWifiStation(g_wifiSSID, g_wifiPassword);
     break;
+
   case DEV_RUNNING:
-    sendNotifyData("WIFI_SUCCESS");
+    sendNotifyData("WIFI_CONNECT");
     Serial.println("运行中");
     break;
+
   case DEV_SLEEP:
     Serial.println("睡眠");
     break;
@@ -238,7 +243,6 @@ void BLERecvCallback(const String &rcvData)
       Serial.println("g_wifiSSID:" + g_wifiSSID + " g_wifiPassword:" + g_wifiPassword);
       // 标记新配置已接收
       g_DeviceConfigReceived = true;
-
       // 发送确认消息
       sendNotifyData("CONFIG_DONE");
     }
