@@ -46,6 +46,7 @@ bool enterAPMode(String AP_name, String &wifi_ssid, String &wifi_pwd)
     {
         WiFi.softAP(AP_name);
         Udp.begin(8266);
+        Serial.println("WiFi.getMode()" + WiFi.getMode());
     }
     else
     { // 已经连接，等待配网信息
@@ -79,7 +80,7 @@ bool enterAPMode(String AP_name, String &wifi_ssid, String &wifi_pwd)
                 wifi_ssid = ssid;
                 wifi_pwd = password;
                 Serial.println("wifi_ssid:" + wifi_ssid + " wifi_pwd:" + wifi_pwd);
-                
+
                 // 收到信息，并回复
                 String ReplyBuffer = "{\"cmdType\":2,\"productId\":\"" + topic + "\",\"deviceName\":\"" + String(device.Name) + "\",\"protoVersion\":\"" + String(device.proto) + "\"}";
                 Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
@@ -120,8 +121,73 @@ bool isWifiConnected()
 // 启动station模式
 void startWifiStation(const String &ssid, const String &password)
 {
-    WiFi.disconnect();
+    // WiFi.disconnect();
+    // Serial.println("WiFi.disconnect");
     WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid.c_str(), password.c_str());
-    Serial.println("wifi begin ssid:" + ssid + " password:" + password);
+    wl_status_t res = WiFi.begin(ssid.c_str(), password.c_str());
+    Serial.print("res:");
+    Serial.println(res);
+    // Serial.println("wifi begin ssid:" + ssid + " password:" + password);
+    // scanAndPrintDevice();
+}
+
+void printWiFiStatus()
+{
+    int status = WiFi.status();
+    switch (status)
+    {
+    case WL_IDLE_STATUS:
+        Serial.println("WL_IDLE_STATUS: WiFi is in idle status.");
+        break;
+    case WL_NO_SSID_AVAIL:
+        Serial.println("WL_NO_SSID_AVAIL: Cannot find the specified SSID.");
+        break;
+    case WL_SCAN_COMPLETED:
+        Serial.println("WL_SCAN_COMPLETED: Scan completed.");
+        break;
+    case WL_CONNECTED:
+        Serial.println("WL_CONNECTED: Successfully connected to WiFi.");
+        break;
+    case WL_CONNECT_FAILED:
+        Serial.println("WL_CONNECT_FAILED: Connection failed.");
+        break;
+    case WL_CONNECTION_LOST:
+        Serial.println("WL_CONNECTION_LOST: Connection lost.");
+        break;
+    case WL_DISCONNECTED:
+        Serial.println("WL_DISCONNECTED: Disconnected from WiFi.");
+        break;
+    default:
+        Serial.println("Unknown status code.");
+        break;
+    }
+}
+// 扫描可用的WiFi网络并打印
+void scanAndPrintDevice()
+{
+    // 搜索可用的WiFi网络
+    int n = WiFi.scanNetworks();
+    Serial.println("扫描完成");
+    if (n == 0)
+    {
+        Serial.println("没有找到可用的网络");
+    }
+    else
+    {
+        Serial.print(n);
+        Serial.println(" 个网络被找到");
+        for (int i = 0; i < n; ++i)
+        {
+            // 打印每个网络的详细信息
+            Serial.print(i + 1);
+            Serial.print(": ");
+            Serial.print(WiFi.SSID(i));
+            Serial.print(" (");
+            Serial.print(WiFi.RSSI(i));
+            Serial.print(")");
+            Serial.println((WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? " " : "*");
+            delay(10);
+        }
+    }
+    Serial.println("");
 }

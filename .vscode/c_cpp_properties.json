@@ -4,16 +4,19 @@
             "name": "Arduino",
             "includePath": [
                 "${workspaceFolder}/**",
-                // "/Users/你的用户名/Documents/Arduino/hardware/esp8266com/esp8266/**",
-                // "/Users/你的用户名/Documents/Arduino/libraries/**",
+                // 包含你项目中的库文件。
                 "/Users/tommybei/software/arduinoProject/libraries/**",
-                "/Users/tommybei/Documents/Arduino/hardware/esp8266com/esp8266/**",
+                // 包含 ESP32 硬件包的路径。
                 "/Users/tommybei/Documents/Arduino/hardware/**",
-                "/Users/tommybei/Documents/Arduino/packages/**"
+                "/Users/tommybei/Documents/Arduino/hardware/esp8266com/esp8266/**",
+                // 包含 Arduino 内置库的路径。
+                "/Applications/Arduino IDE.app/Contents/**",
+                // 包含用户安装的 Arduino 库的路径。
+                "/Users/tommybei/Documents/Arduino/packages/**"                
             ],
             "forcedInclude": [],
             "intelliSenseMode": "macos-clang-x64",
-            "compilerPath": "/Users/tommybei/Documents/Arduino/hardware/tools/avr/bin/avr-gcc",
+            "compilerPath": "/Users/tommybei/Library/Arduino15/packages/esp32/tools/",
             "cStandard": "c11",
             "cppStandard": "c++17"
         }

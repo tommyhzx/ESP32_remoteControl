@@ -1,3 +1,4 @@
+#include <Arduino.h> // 添加这个头文件
 
 #define SERVICE_UUID "4FAFC201-1FB5-459E-8FCC-C5C9C331914B"
 #define CHARACTERISTIC_UUID "BEB5483E-36E1-4688-B7F5-EA07361B26A8"
@@ -17,7 +18,8 @@
 #define LED_OFF 1
 #define SWITCH_ON 1
 #define SWITCH_OFF 0
-
+// ESP-01s的状态指示灯 GPIO2, wifi正在连接时，led闪烁，无wifi连接，led点亮，连接上，led灭
+const int LED_Status = 0;
 // 蓝牙模块的全景变量
 bool g_DeviceConfigReceived; // 是否接收到新的蓝牙配置信息
 
@@ -25,11 +27,22 @@ bool g_DeviceConfigReceived; // 是否接收到新的蓝牙配置信息
 typedef void (*OnWriteCallback)(const String &rcvData);
 OnWriteCallback onWriteCallback = nullptr;
 
+// 定义TCP回调函数
+typedef void (*TCPMessageCallback)(const String &message);
+TCPMessageCallback tcpMessageCallback = nullptr;
+
 // 设置wifi的账号密码全局变量，在setup和loop中使用
-String g_wifiSSID = "maoshushu";
-String g_wifiPassword = "20240110111";
-String mac = "ESP32";        // 替换为实际的MAC地址
-String deviceName = "ESP32"; // 替换为实际的设备名称
+String g_wifiSSID = "TP-LINK_F2F3";
+String g_wifiPassword = "1357246800";
+String mac = "ESP32-1";        // 替换为实际的MAC地址
+String deviceName = "ESP32-1"; // 替换为实际的设备名称
+
+// TCP连接的全局变量
+char *serverAddr = "bemfa.com";
+int serverPort = 8344;
+char *uid = "c2421290f7d14fa38251e5f77aac931a";
+char *topic = "SN001001001";
+
 // 定义状态机状态
 // WiFi状态机的状态
 enum DeviceState
@@ -96,6 +109,7 @@ void loop()
   // Serial.println(sensorValue);
 }
 // 状态机在当前状态需要执行的动作
+static unsigned long lastPrintTime = 0; // 上次打印时间
 void performStateActions()
 {
   switch (currentState)
@@ -109,13 +123,20 @@ void performStateActions()
     }
     else if (millis() - lastStateChange >= 10000) // 超过10秒未连接成功
     {
-      Serial.println("lastStateChange" + String(lastStateChange));
-      changeState(DEV_IDLE);
+      Serial.println("连接超时，请重新配置wifi账号密码");
+      changeState(DEV_INIT);
+    }
+    // 每1秒打印一次WiFi.status()
+    if (millis() - lastPrintTime >= 1000)
+    {
+      lastPrintTime = millis();
+      Serial.print("WiFi.status(): ");
+      printWiFiStatus();
     }
     break;
 
   /* 空闲状态：配置AP模式和蓝牙广播
-   * 等待接收AP的配网信息和蓝牙的配网信息*/
+   * 等待接收AP的配网信息和蓝牙的配网信息 */
   case DEV_IDLE:
     // AP模式
     if (enterAPMode(deviceName, g_wifiSSID, g_wifiPassword))
@@ -134,7 +155,7 @@ void performStateActions()
 
   // 判断WIFI是否连接，连接则进入运行状态，否则进入idle状态
   case DEV_CONFIGURING:
-    static unsigned long lastPrintTime = 0;
+    // static unsigned long lastPrintTime = 0;
     // 每秒打印一次 "Connecting..."
     if (currentMillis - lastPrintTime >= 1000)
     {
@@ -161,23 +182,50 @@ void performStateActions()
     static unsigned long runningStartTime = 0;
     static bool bleClosed = false; // 新增变量，标记蓝牙是否已关闭
 
-    if (runningStartTime == 0) {
-        runningStartTime = millis(); // 记录进入DEV_RUNNING状态的时间
-        bleClosed = false; // 重置蓝牙关闭标志
+    // TCP重连时间
+    static uint32_t lastReconnectAttempt = 0;
+
+    if (runningStartTime == 0)
+    {
+      runningStartTime = millis(); // 记录进入DEV_RUNNING状态的时间
+      bleClosed = false;           // 重置蓝牙关闭标志
     }
 
-    if (!isWifiConnected())
+    if (isWifiConnected())
     {
+      // 检查是否已经运行了10分钟，超过10分钟关闭蓝牙
+      if (!bleClosed && millis() - runningStartTime >= 10 * 1 * 1000) // 检查是否已经运行了10分钟
+      {
+        Serial.println("10分钟已到，关闭蓝牙");
+        deinitBLE();      // 关闭蓝牙
+        bleClosed = true; // 设置蓝牙关闭标志
+      }
+      // 判断TCP是否连接，若未连接则重连
+      if (!isTCPConnected())
+      {
+        // 每秒尝试重连一次
+        uint32_t currentMillis = millis();
+        if (currentMillis - lastReconnectAttempt > 1 * 1000)
+        {
+          lastReconnectAttempt = currentMillis;
+          Serial.println("TCP Client is not connected. Attempting to connect...");
+          // 调用 startTCPClient 函数
+          startTCPClient(serverAddr, serverPort, uid, topic);
+        }
+      }
+      else
+      {
+        // 处理TCP消息
+        handleTCPMessage();
+      }
+    }
+    else
+    {
+      // wifi断开，进入idle状态
       changeState(DEV_INIT);
       runningStartTime = 0; // 重置计时器
     }
-    // 检查是否已经运行了10分钟，超过10分钟关闭蓝牙
-    else if (!bleClosed && millis() - runningStartTime >= 10 * 1 * 1000) // 检查是否已经运行了10分钟
-    {
-        Serial.println("10分钟已到，关闭蓝牙");
-        deinitBLE(); // 关闭蓝牙
-        bleClosed = true; // 设置蓝牙关闭标志
-    }
+
     break;
 
   case DEV_SLEEP:
@@ -196,8 +244,10 @@ void changeState(DeviceState newState)
   // 进入初始化状态，初始化蓝牙和wifi
   case DEV_INIT:
     startWifiStation(g_wifiSSID, g_wifiPassword); // 启动wifi STA模式
-    initBLE(deviceName);                          // 初始化蓝牙
-    setOnWriteCallback(BLERecvCallback);          // 设置蓝牙收到消息的回调函数
+    // initBLE(deviceName);                          // 初始化蓝牙
+    setOnWriteCallback(BLERecvCallback); // 设置蓝牙收到消息的回调函数
+    // 注册TCP回调函数
+    setTCPMessageCallback(handleTCPMessageFromMain);
     Serial.println("初始化");
     break;
 
@@ -245,6 +295,31 @@ void BLERecvCallback(const String &rcvData)
       g_DeviceConfigReceived = true;
       // 发送确认消息
       sendNotifyData("CONFIG_DONE");
+    }
+  }
+}
+
+// 处理TCP接收到的消息
+void handleTCPMessageFromMain(const String &message)
+{
+  // 有时会连续收到包，若接收到的最后的数据中包含&msg=，则说明是最终数据
+  int lastIndex = message.lastIndexOf("&msg=");
+  if (lastIndex != -1)
+  {
+    // 去除掉&msg=这5个数据
+    String msgValue = message.substring(lastIndex + 5);
+    msgValue.trim();
+    Serial.println("msgValue is " + msgValue);
+    if (msgValue.equals("on"))
+    {
+      SwitchSet(SWITCH_ON);
+      // switch_on_tick = millis();
+      // switch_on = true;
+    }
+    else if (msgValue.equals("off"))
+    {
+      SwitchSet(SWITCH_OFF);
+      // switch_on = false;
     }
   }
 }
