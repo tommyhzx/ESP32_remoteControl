@@ -46,7 +46,6 @@ bool enterAPMode(String AP_name, String &wifi_ssid, String &wifi_pwd)
     {
         WiFi.softAP(AP_name);
         Udp.begin(8266);
-        Serial.println("WiFi.getMode()" + WiFi.getMode());
     }
     else
     { // 已经连接，等待配网信息
@@ -121,14 +120,9 @@ bool isWifiConnected()
 // 启动station模式
 void startWifiStation(const String &ssid, const String &password)
 {
-    // WiFi.disconnect();
-    // Serial.println("WiFi.disconnect");
+    WiFi.disconnect();
     WiFi.mode(WIFI_STA);
     wl_status_t res = WiFi.begin(ssid.c_str(), password.c_str());
-    Serial.print("res:");
-    Serial.println(res);
-    // Serial.println("wifi begin ssid:" + ssid + " password:" + password);
-    // scanAndPrintDevice();
 }
 
 void printWiFiStatus()

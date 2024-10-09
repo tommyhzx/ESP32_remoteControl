@@ -32,8 +32,8 @@ typedef void (*TCPMessageCallback)(const String &message);
 TCPMessageCallback tcpMessageCallback = nullptr;
 
 // 设置wifi的账号密码全局变量，在setup和loop中使用
-String g_wifiSSID = "TP-LINK_F2F3";
-String g_wifiPassword = "1357246800";
+String g_wifiSSID = "maoshushu";
+String g_wifiPassword = "202401101";
 String mac = "ESP32-1";        // 替换为实际的MAC地址
 String deviceName = "ESP32-1"; // 替换为实际的设备名称
 
@@ -69,6 +69,9 @@ void setup()
   pinMode(SWITCH_Pin, OUTPUT);
   setLEDStatus(LED_OFF);
   SwitchSet(SWITCH_OFF);
+  // 设置ADC分辨率为12位
+  analogReadResolution(12);
+  // 延迟15s，等待串口打印
   delay(15 * 1000);
   Serial.println("System start!");
   // 检查是否需要清除EEPROM
@@ -77,13 +80,12 @@ void setup()
   delay(3 * 1000);
   resetResetFlag();
   // 调试用
-  save_config_EEPROM(g_wifiSSID, g_wifiPassword);
+  // save_config_EEPROM(g_wifiSSID, g_wifiPassword);
   // 先从EEPROM读取WIFI相关配置信息
   read_SSID_eeprom(g_wifiSSID, g_wifiPassword);
   Serial.println("g_wifiSSID:" + String(g_wifiSSID));
   Serial.println("g_wifiPassword:" + String(g_wifiPassword));
 
-  analogReadResolution(12);
   // 初始化状态机相关变量
   changeState(DEV_INIT);
 }
@@ -93,19 +95,9 @@ void loop()
   currentMillis = millis();
 
   performStateActions(); // 执行状态动作逻辑
-
   // put your main code here, to run repeatedly:
   // read the value from the sensor:
   // int sensorValue = analogRead(sensorPin);
-  // // turn the ledPin on
-  // digitalWrite(ledPin, HIGH);
-  // // stop the program for <sensorValue> milliseconds:
-  // delay(1000);
-  // // turn the ledPin off:
-  // digitalWrite(ledPin, LOW);
-  // // stop the program for for <sensorValue> milliseconds:
-  // delay(1000);
-
   // Serial.println(sensorValue);
 }
 // 状态机在当前状态需要执行的动作
@@ -124,14 +116,13 @@ void performStateActions()
     else if (millis() - lastStateChange >= 10000) // 超过10秒未连接成功
     {
       Serial.println("连接超时，请重新配置wifi账号密码");
-      changeState(DEV_INIT);
+      changeState(DEV_IDLE);
     }
     // 每1秒打印一次WiFi.status()
     if (millis() - lastPrintTime >= 1000)
     {
       lastPrintTime = millis();
-      Serial.print("WiFi.status(): ");
-      printWiFiStatus();
+      Serial.println("Connecting...");
     }
     break;
 
@@ -141,7 +132,7 @@ void performStateActions()
     // AP模式
     if (enterAPMode(deviceName, g_wifiSSID, g_wifiPassword))
     {
-      Serial.println("change to WIFI_STA_MODE");
+      Serial.println("完成配网，返回STA模式");
       changeState(DEV_CONFIGURING);
     }
     // 检查蓝牙是否接收到新的WiFi配置信息
@@ -155,7 +146,6 @@ void performStateActions()
 
   // 判断WIFI是否连接，连接则进入运行状态，否则进入idle状态
   case DEV_CONFIGURING:
-    // static unsigned long lastPrintTime = 0;
     // 每秒打印一次 "Connecting..."
     if (currentMillis - lastPrintTime >= 1000)
     {
@@ -225,7 +215,6 @@ void performStateActions()
       changeState(DEV_INIT);
       runningStartTime = 0; // 重置计时器
     }
-
     break;
 
   case DEV_SLEEP:
@@ -244,27 +233,28 @@ void changeState(DeviceState newState)
   // 进入初始化状态，初始化蓝牙和wifi
   case DEV_INIT:
     startWifiStation(g_wifiSSID, g_wifiPassword); // 启动wifi STA模式
-    // initBLE(deviceName);                          // 初始化蓝牙
-    setOnWriteCallback(BLERecvCallback); // 设置蓝牙收到消息的回调函数
+    initBLE(deviceName);                          // 初始化蓝牙
+    setOnWriteCallback(BLERecvCallback);          // 设置蓝牙收到消息的回调函数
     // 注册TCP回调函数
     setTCPMessageCallback(handleTCPMessageFromMain);
     Serial.println("初始化");
     break;
 
   case DEV_IDLE:
-    Serial.println("空闲");
+    Serial.println("进入空闲");
     break;
 
   // 当状态从idle切换到configuring时，需要将wifi设置为STA模式
   case DEV_CONFIGURING:
-    Serial.println("配置中");
+    Serial.println("进入配置中");
     // 启动wifi STA模式
     startWifiStation(g_wifiSSID, g_wifiPassword);
     break;
 
   case DEV_RUNNING:
+    Serial.println("进入运行中");
+    // 向蓝牙发送WIFI连接成功的消息
     sendNotifyData("WIFI_CONNECT");
-    Serial.println("运行中");
     break;
 
   case DEV_SLEEP:
